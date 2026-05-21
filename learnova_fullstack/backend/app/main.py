@@ -1,0 +1,36 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.api import auth, profile, crud_routes
+from app.db.session import Base, engine, SessionLocal
+from app.services.seed import seed_demo_data
+
+app = FastAPI(title="Learnova API", version="1.0.0", description="Backend API for Learnova Student Learning & Task Organizer")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.on_event("startup")
+def on_startup():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        seed_demo_data(db)
+    finally:
+        db.close()
+
+@app.get("/")
+def root():
+    return {"app": "Learnova API", "status": "running", "docs": "/docs"}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+app.include_router(auth.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
+app.include_router(crud_routes.router, prefix="/api")
