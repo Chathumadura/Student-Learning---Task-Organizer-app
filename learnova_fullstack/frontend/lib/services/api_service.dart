@@ -7,15 +7,9 @@ import 'course_event_bus.dart';
 
 /// Learnova API service.
 ///
-/// For Android emulator use: http://10.0.2.2:8000/api
-/// For Chrome/Web or desktop use: http://127.0.0.1:8000/api
-/// For real phone use your laptop IP address, example: http://192.168.1.5:8000/api
+/// Production backend: https://student-learning-task-organizer-app.onrender.com/api
 class ApiService {
-  static String baseUrl = kIsWeb
-      ? 'http://127.0.0.1:8000/api'
-      : (defaultTargetPlatform == TargetPlatform.android
-            ? 'http://10.0.2.2:8000/api'
-            : 'http://127.0.0.1:8000/api');
+  static const String baseUrl = 'https://student-learning-task-organizer-app.onrender.com/api';
 
   static String? token;
   static const String _tokenKey = 'learnova_auth_token';
