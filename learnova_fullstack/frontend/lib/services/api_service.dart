@@ -9,7 +9,8 @@ import 'course_event_bus.dart';
 ///
 /// Production backend: https://student-learning-task-organizer-app.onrender.com/api
 class ApiService {
-  static const String baseUrl = 'https://student-learning-task-organizer-app.onrender.com/api';
+  static const String baseUrl =
+      'https://student-learning-task-organizer-app.onrender.com/api';
 
   static String? token;
   static const String _tokenKey = 'learnova_auth_token';
@@ -76,40 +77,54 @@ class ApiService {
         'password': password,
         'role': 'Student',
         'course': course,
-        if (studentId != null && studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+        if (studentId != null && studentId.trim().isNotEmpty)
+          'student_id': studentId.trim(),
       }),
     );
     if (res.statusCode != 201) throw Exception(_message(res));
     await _saveToken(jsonDecode(res.body)['access_token']);
   }
 
-  static Future<Map<String, dynamic>> forgotPassword(String email) async => _postMap('/auth/forgot-password', {'email': email});
-  static Future<Map<String, dynamic>> resetPassword(String email, String newPassword, String confirmPassword) async => _postMap('/auth/reset-password', {
+  static Future<Map<String, dynamic>> forgotPassword(String email) async =>
+      _postMap('/auth/forgot-password', {'email': email});
+  static Future<Map<String, dynamic>> resetPassword(
+          String email, String newPassword, String confirmPassword) async =>
+      _postMap('/auth/reset-password', {
         'email': email,
         'new_password': newPassword,
         'confirm_password': confirmPassword,
       });
-  static Future<Map<String, dynamic>> changePassword(String currentPassword, String newPassword, String confirmPassword) async => _putMap('/profile/change-password', {
+  static Future<Map<String, dynamic>> changePassword(String currentPassword,
+          String newPassword, String confirmPassword) async =>
+      _putMap('/profile/change-password', {
         'current_password': currentPassword,
         'new_password': newPassword,
         'confirm_password': confirmPassword,
       });
 
-  static Future<Map<String, dynamic>> dashboard() async => _getMap('/dashboard');
+  static Future<Map<String, dynamic>> dashboard() async =>
+      _getMap('/dashboard');
   static Future<Map<String, dynamic>> profile() async => _getMap('/profile/me');
-  static Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async => _putMap('/profile/me', data);
+  static Future<Map<String, dynamic>> updateProfile(
+          Map<String, dynamic> data) async =>
+      _putMap('/profile/me', data);
 
-  static Future<List<dynamic>> courses({bool includeArchived = false}) async => _getList(includeArchived ? '/courses?include_archived=true' : '/courses');
-  static Future<List<dynamic>> archivedCourses() async => _getList('/courses/archived');
-  static Future<Map<String, dynamic>> getCourse(int id) async => _getMap('/courses/$id');
-  
-  static Future<Map<String, dynamic>> addCourse(Map<String, dynamic> data) async {
+  static Future<List<dynamic>> courses({bool includeArchived = false}) async =>
+      _getList(includeArchived ? '/courses?include_archived=true' : '/courses');
+  static Future<List<dynamic>> archivedCourses() async =>
+      _getList('/courses/archived');
+  static Future<Map<String, dynamic>> getCourse(int id) async =>
+      _getMap('/courses/$id');
+
+  static Future<Map<String, dynamic>> addCourse(
+      Map<String, dynamic> data) async {
     final res = await _postMap('/courses', data);
     CourseEventBus.notify();
     return res;
   }
 
-  static Future<Map<String, dynamic>> updateCourse(int id, Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> updateCourse(
+      int id, Map<String, dynamic> data) async {
     final res = await _putMap('/courses/$id', data);
     CourseEventBus.notify();
     return res;
@@ -132,23 +147,32 @@ class ApiService {
     CourseEventBus.notify();
   }
 
-  static Future<List<dynamic>> tasks({String? status, String? priority, String? search}) async {
+  static Future<List<dynamic>> tasks(
+      {String? status, String? priority, String? search}) async {
     final params = <String, String>{};
-    if (status != null && status.isNotEmpty && status != 'all') params['status'] = status;
-    if (priority != null && priority.isNotEmpty && priority != 'All') params['priority'] = priority;
-    if (search != null && search.trim().isNotEmpty) params['search'] = search.trim();
-    final query = params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
+    if (status != null && status.isNotEmpty && status != 'all')
+      params['status'] = status;
+    if (priority != null && priority.isNotEmpty && priority != 'All')
+      params['priority'] = priority;
+    if (search != null && search.trim().isNotEmpty)
+      params['search'] = search.trim();
+    final query =
+        params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
     return _getList('/tasks$query');
   }
-  static Future<Map<String, dynamic>> taskSummary() async => _getMap('/tasks/summary');
-  static Future<Map<String, dynamic>> getTask(int id) async => _getMap('/tasks/$id');
+
+  static Future<Map<String, dynamic>> taskSummary() async =>
+      _getMap('/tasks/summary');
+  static Future<Map<String, dynamic>> getTask(int id) async =>
+      _getMap('/tasks/$id');
   static Future<Map<String, dynamic>> addTask(Map<String, dynamic> data) async {
     final res = await _postMap('/tasks', data);
     TaskEventBus.notify();
     return res;
   }
 
-  static Future<Map<String, dynamic>> updateTask(int id, Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> updateTask(
+      int id, Map<String, dynamic> data) async {
     final res = await _putMap('/tasks/$id', data);
     TaskEventBus.notify();
     return res;
@@ -171,47 +195,85 @@ class ApiService {
     TaskEventBus.notify();
   }
 
-  static Future<List<dynamic>> studySessions({String? date, String? search}) async {
+  static Future<List<dynamic>> studySessions(
+      {String? date, String? search}) async {
     final params = <String, String>{};
-    if (date != null && date.trim().isNotEmpty) params['session_date'] = date.trim();
-    if (search != null && search.trim().isNotEmpty) params['search'] = search.trim();
-    final query = params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
+    if (date != null && date.trim().isNotEmpty)
+      params['session_date'] = date.trim();
+    if (search != null && search.trim().isNotEmpty)
+      params['search'] = search.trim();
+    final query =
+        params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
     return _getList('/study-sessions$query');
   }
-  static Future<Map<String, dynamic>> studySessionSummary() async => _getMap('/study-sessions/summary');
-  static Future<Map<String, dynamic>> getStudySession(int id) async => _getMap('/study-sessions/$id');
-  static Future<Map<String, dynamic>> addStudySession(Map<String, dynamic> data) async => _postMap('/study-sessions', data);
-  static Future<Map<String, dynamic>> updateStudySession(int id, Map<String, dynamic> data) async => _putMap('/study-sessions/$id', data);
-  static Future<Map<String, dynamic>> updateStudySessionReminder(int id, String reminder) async => _putMap('/study-sessions/$id/reminder', {'reminder': reminder});
-  static Future<void> deleteStudySession(int id) async => _delete('/study-sessions/$id');
 
-  static Future<List<dynamic>> progress({String? status, String? search}) async {
+  static Future<Map<String, dynamic>> studySessionSummary() async =>
+      _getMap('/study-sessions/summary');
+  static Future<Map<String, dynamic>> getStudySession(int id) async =>
+      _getMap('/study-sessions/$id');
+  static Future<Map<String, dynamic>> addStudySession(
+          Map<String, dynamic> data) async =>
+      _postMap('/study-sessions', data);
+  static Future<Map<String, dynamic>> updateStudySession(
+          int id, Map<String, dynamic> data) async =>
+      _putMap('/study-sessions/$id', data);
+  static Future<Map<String, dynamic>> updateStudySessionReminder(
+          int id, String reminder) async =>
+      _putMap('/study-sessions/$id/reminder', {'reminder': reminder});
+  static Future<void> deleteStudySession(int id) async =>
+      _delete('/study-sessions/$id');
+
+  static Future<List<dynamic>> progress(
+      {String? status, String? search}) async {
     final params = <String, String>{};
-    if (status != null && status.isNotEmpty && status != 'All') params['status'] = status;
-    if (search != null && search.trim().isNotEmpty) params['search'] = search.trim();
-    final query = params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
+    if (status != null && status.isNotEmpty && status != 'All')
+      params['status'] = status;
+    if (search != null && search.trim().isNotEmpty)
+      params['search'] = search.trim();
+    final query =
+        params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
     return _getList('/progress$query');
   }
-  static Future<Map<String, dynamic>> progressSummary() async => _getMap('/progress/summary');
-  static Future<List<dynamic>> weeklyStats() async => _getList('/progress/weekly-stats');
-  static Future<List<dynamic>> courseProgress() async => _getList('/course-progress');
-  static Future<Map<String, dynamic>> addProgress(Map<String, dynamic> data) async => _postMap('/progress', data);
-  static Future<Map<String, dynamic>> updateProgress(int id, Map<String, dynamic> data) async => _putMap('/progress/$id', data);
+
+  static Future<Map<String, dynamic>> progressSummary() async =>
+      _getMap('/progress/summary');
+  static Future<List<dynamic>> weeklyStats() async =>
+      _getList('/progress/weekly-stats');
+  static Future<List<dynamic>> courseProgress() async =>
+      _getList('/course-progress');
+  static Future<Map<String, dynamic>> addProgress(
+          Map<String, dynamic> data) async =>
+      _postMap('/progress', data);
+  static Future<Map<String, dynamic>> updateProgress(
+          int id, Map<String, dynamic> data) async =>
+      _putMap('/progress/$id', data);
   static Future<void> deleteProgress(int id) async => _delete('/progress/$id');
 
   static Future<List<dynamic>> goals() async => _getList('/goals');
-  static Future<Map<String, dynamic>> addGoal(Map<String, dynamic> data) async => _postMap('/goals', data);
-  static Future<Map<String, dynamic>> updateGoal(int id, Map<String, dynamic> data) async => _putMap('/goals/$id', data);
+  static Future<Map<String, dynamic>> addGoal(
+          Map<String, dynamic> data) async =>
+      _postMap('/goals', data);
+  static Future<Map<String, dynamic>> updateGoal(
+          int id, Map<String, dynamic> data) async =>
+      _putMap('/goals/$id', data);
   static Future<void> deleteGoal(int id) async => _delete('/goals/$id');
 
-  static Future<List<dynamic>> notifications() async => _getList('/notifications');
-  static Future<Map<String, dynamic>> notificationSettings() async => _getMap('/notification-settings');
-  static Future<Map<String, dynamic>> updateNotificationSettings(Map<String, dynamic> data) async => _putMap('/notification-settings', data);
+  static Future<List<dynamic>> notifications() async =>
+      _getList('/notifications');
+  static Future<Map<String, dynamic>> notificationSettings() async =>
+      _getMap('/notification-settings');
+  static Future<Map<String, dynamic>> updateNotificationSettings(
+          Map<String, dynamic> data) async =>
+      _putMap('/notification-settings', data);
 
-  static Future<Map<String, dynamic>> appSettings() async => _getMap('/app-settings');
-  static Future<Map<String, dynamic>> updateAppSettings(Map<String, dynamic> data) async => _putMap('/app-settings', data);
+  static Future<Map<String, dynamic>> appSettings() async =>
+      _getMap('/app-settings');
+  static Future<Map<String, dynamic>> updateAppSettings(
+          Map<String, dynamic> data) async =>
+      _putMap('/app-settings', data);
 
-  static Future<Map<String, dynamic>> sendFeedback(String message) async => _postMap('/feedback', {'message': message});
+  static Future<Map<String, dynamic>> sendFeedback(String message) async =>
+      _postMap('/feedback', {'message': message});
   static Future<Map<String, dynamic>> help() async => _getMap('/help');
 
   static Future<Map<String, dynamic>> _getMap(String path) async {
@@ -226,27 +288,35 @@ class ApiService {
     return jsonDecode(res.body) as List<dynamic>;
   }
 
-  static Future<Map<String, dynamic>> _postMap(String path, Map<String, dynamic> data) async {
-    final res = await http.post(Uri.parse('$baseUrl$path'), headers: _headers, body: jsonEncode(data));
-    if (res.statusCode != 200 && res.statusCode != 201) throw Exception(_message(res));
+  static Future<Map<String, dynamic>> _postMap(
+      String path, Map<String, dynamic> data) async {
+    final res = await http.post(Uri.parse('$baseUrl$path'),
+        headers: _headers, body: jsonEncode(data));
+    if (res.statusCode != 200 && res.statusCode != 201)
+      throw Exception(_message(res));
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  static Future<Map<String, dynamic>> _putMap(String path, Map<String, dynamic> data) async {
-    final res = await http.put(Uri.parse('$baseUrl$path'), headers: _headers, body: jsonEncode(data));
+  static Future<Map<String, dynamic>> _putMap(
+      String path, Map<String, dynamic> data) async {
+    final res = await http.put(Uri.parse('$baseUrl$path'),
+        headers: _headers, body: jsonEncode(data));
     if (res.statusCode != 200) throw Exception(_message(res));
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
   static Future<void> _delete(String path) async {
-    final res = await http.delete(Uri.parse('$baseUrl$path'), headers: _headers);
+    final res =
+        await http.delete(Uri.parse('$baseUrl$path'), headers: _headers);
     if (res.statusCode != 200) throw Exception(_message(res));
   }
 
   static String _message(http.Response res) {
     try {
       final body = jsonDecode(res.body);
-      return body['detail']?.toString() ?? body['message']?.toString() ?? res.body;
+      return body['detail']?.toString() ??
+          body['message']?.toString() ??
+          res.body;
     } catch (_) {
       return res.body;
     }
