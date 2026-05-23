@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/learnova_widgets.dart';
@@ -101,7 +103,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 const SizedBox(height: 6),
                 Text(safe(n['message']), style: const TextStyle(color: AppColors.muted, height: 1.35, fontSize: 12)),
                 const SizedBox(height: 8),
-                Text(safe(n['time'], 'Now'), style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+                Text(_notificationTime(n), style: const TextStyle(color: AppColors.muted, fontSize: 11)),
               ],
             ),
           ),
@@ -110,6 +112,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ],
       ),
     );
+  }
+
+  String _notificationTime(dynamic n) {
+    final raw = safe(n['time'], '').trim();
+    if (raw.isNotEmpty) return raw;
+
+    final created = safe(n['created_at'], '').trim();
+    if (created.isEmpty) return 'Now';
+
+    DateTime? when;
+    try {
+      when = DateTime.parse(created).toLocal();
+    } catch (_) {
+      return created;
+    }
+
+    final diff = DateTime.now().difference(when);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${when.year}-${when.month.toString().padLeft(2, '0')}-${when.day.toString().padLeft(2, '0')}';
   }
 }
 
@@ -249,7 +273,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            _settingsTile(Icons.notifications_none, 'Notifications', () => Navigator.pushNamed(context, '/notificationSettings')),
+            _settingsTile(Icons.notifications_none, 'Notifications', () => Navigator.pushNamed(context, '/notifications')),
             _settingsTile(Icons.chat_bubble_outline, 'Send Feedback', () => Navigator.pushNamed(context, '/feedback')),
             _settingsTile(Icons.help_outline, 'Help & Support', () => Navigator.pushNamed(context, '/help')),
             const SizedBox(height: 18),
@@ -302,13 +326,85 @@ class FeedbackScreen extends StatefulWidget {
 class _FeedbackScreenState extends State<FeedbackScreen> {
   final msg = TextEditingController();
   bool loading = false;
+  List<dynamic> feedbacks = [];
+  bool listLoading = true;
+  static const String _cacheKey = 'learnova_feedback_cache';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => listLoading = true);
+    try {
+      try {
+        feedbacks = await ApiService.feedbacks();
+        await _saveCache(feedbacks);
+      } catch (_) {
+        feedbacks = await _readCache();
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, e.toString().replaceFirst('Exception: ', ''));
+    }
+    if (mounted) setState(() => listLoading = false);
+  }
+
+  Future<List<dynamic>> _readCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_cacheKey);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is List ? decoded : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _saveCache(List<dynamic> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_cacheKey, jsonEncode(items));
+  }
+
+  Future<void> _upsertLocalFeedback(Map<String, dynamic> item) async {
+    final list = await _readCache();
+    final id = item['id'];
+    final index = list.indexWhere((e) => e is Map && e['id'] == id);
+    if (index >= 0) {
+      list[index] = item;
+    } else {
+      list.insert(0, item);
+    }
+    await _saveCache(list);
+    feedbacks = list;
+  }
+
+  Future<void> _removeLocalFeedback(dynamic id) async {
+    final list = await _readCache();
+    list.removeWhere((e) => e is Map && e['id'] == id);
+    await _saveCache(list);
+    feedbacks = list;
+  }
 
   Future<void> _send() async {
     if (msg.text.trim().isEmpty) return showSnack(context, 'Please enter feedback');
     setState(() => loading = true);
     try {
-      await ApiService.sendFeedback(msg.text.trim());
+      Map<String, dynamic>? created;
+      try {
+        created = await ApiService.sendFeedback(msg.text.trim());
+      } catch (_) {
+        created = {
+          'id': DateTime.now().millisecondsSinceEpoch,
+          'message': msg.text.trim(),
+          'created_at': DateTime.now().toIso8601String(),
+        };
+      }
+      await _upsertLocalFeedback(created);
       msg.clear();
+      await _load();
       if (mounted) showSnack(context, 'Feedback submitted');
     } catch (e) {
       if (mounted) showSnack(context, e.toString().replaceFirst('Exception: ', ''));
@@ -317,23 +413,120 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     }
   }
 
+  Future<void> _editFeedback(dynamic item) async {
+    final editController = TextEditingController(text: safe(item['message']));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Feedback'),
+        content: LTextField(
+          controller: editController,
+          label: 'Feedback text',
+          hint: 'Type your feedback here...',
+          maxLines: 5,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+    if (editController.text.trim().isEmpty) return showSnack(context, 'Please enter feedback');
+
+    try {
+      final updated = {...Map<String, dynamic>.from(item), 'message': editController.text.trim()};
+      try {
+        await ApiService.updateFeedback(asInt(item['id']), {'message': editController.text.trim()});
+      } catch (_) {}
+      await _upsertLocalFeedback(updated);
+      await _load();
+      if (mounted) showSnack(context, 'Feedback updated');
+    } catch (e) {
+      if (mounted) showSnack(context, e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  Future<void> _deleteFeedback(int id) async {
+    try {
+      try {
+        await ApiService.deleteFeedback(id);
+      } catch (_) {}
+      await _removeLocalFeedback(id);
+      await _load();
+      if (mounted) showSnack(context, 'Feedback deleted');
+    } catch (e) {
+      if (mounted) showSnack(context, e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Send Feedback')),
       body: LScaffold(
-        child: LCard(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('We\'d love to hear your thoughts! Let us know how we can improve Learnova.', style: TextStyle(color: AppColors.muted, height: 1.4)),
-              const SizedBox(height: 18),
-              LTextField(controller: msg, label: 'Feedback text', hint: 'Type your feedback here...', maxLines: 5),
-              const SizedBox(height: 22),
-              LButton(text: loading ? 'Submitting...' : 'Submit Feedback', icon: Icons.send_outlined, onPressed: loading ? null : _send),
-            ],
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LCard(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('We\'d love to hear your thoughts! Let us know how we can improve Learnova.', style: TextStyle(color: AppColors.muted, height: 1.4)),
+                  const SizedBox(height: 18),
+                  LTextField(controller: msg, label: 'Feedback text', hint: 'Type your feedback here...', maxLines: 5),
+                  const SizedBox(height: 22),
+                  LButton(text: loading ? 'Submitting...' : 'Submit Feedback', icon: Icons.send_outlined, onPressed: loading ? null : _send),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text('Your Feedback', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 12),
+            if (listLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (feedbacks.isEmpty)
+              const EmptyState(title: 'No feedback yet', subtitle: 'Submit feedback to see it here.')
+            else
+              ...feedbacks.map((f) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: LCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(color: AppColors.blue.withOpacity(.12), borderRadius: BorderRadius.circular(12)),
+                            child: const Icon(Icons.feedback_outlined, color: AppColors.blue),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(safe(f['message'], '-'), style: const TextStyle(fontWeight: FontWeight.w800, height: 1.35)),
+                                const SizedBox(height: 6),
+                                Text(safe(f['created_at'], 'Now'), style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _editFeedback(f),
+                            icon: const Icon(Icons.edit_outlined, color: AppColors.blue),
+                          ),
+                          IconButton(
+                            onPressed: () => _deleteFeedback(asInt(f['id'])),
+                            icon: const Icon(Icons.delete_outline, color: AppColors.red),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )),
+          ],
         ),
       ),
     );

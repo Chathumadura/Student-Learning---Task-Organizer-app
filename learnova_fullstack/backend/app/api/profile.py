@@ -14,25 +14,31 @@ def my_profile(current_user: User = Depends(get_current_user)):
 
 @router.put("/me", response_model=UserRead)
 def update_profile(payload: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    data = payload.model_dump(exclude_unset=True)
+    try:
+        data = payload.model_dump(exclude_unset=True)
 
-    if "email" in data and data["email"]:
-        new_email = str(data["email"]).lower()
-        existing = db.query(User).filter(User.email == new_email, User.id != current_user.id).first()
-        if existing:
-            raise HTTPException(status_code=409, detail="Email already used by another account")
-        data["email"] = new_email
+        if "email" in data and data["email"]:
+            new_email = str(data["email"]).lower()
+            existing = db.query(User).filter(User.email == new_email, User.id != current_user.id).first()
+            if existing:
+                raise HTTPException(status_code=409, detail="Email already used by another account")
+            data["email"] = new_email
 
-    if "student_id" in data and data["student_id"]:
-        existing = db.query(User).filter(User.student_id == data["student_id"], User.id != current_user.id).first()
-        if existing:
-            raise HTTPException(status_code=409, detail="Student ID already used by another account")
+        if "student_id" in data and data["student_id"]:
+            existing = db.query(User).filter(User.student_id == data["student_id"], User.id != current_user.id).first()
+            if existing:
+                raise HTTPException(status_code=409, detail="Student ID already used by another account")
 
-    for key, value in data.items():
-        setattr(current_user, key, value)
-    db.commit()
-    db.refresh(current_user)
-    return current_user
+        for key, value in data.items():
+            setattr(current_user, key, value)
+        db.commit()
+        db.refresh(current_user)
+        return current_user
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Failed to update profile: {str(e)}")
 
 @router.put("/change-password")
 def change_password(payload: ChangePasswordRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

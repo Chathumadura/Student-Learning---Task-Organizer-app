@@ -45,8 +45,18 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 def login(payload: UserLogin, db: Session = Depends(get_db)):
     identifier = payload.identifier.strip()
+    email_identifier = identifier.lower()
+
+    student_identifier = identifier
+    if email_identifier.endswith("@horizoncampus.edu.lk"):
+        student_identifier = identifier[: -len("@horizoncampus.edu.lk")]
+
     user = db.query(User).filter(
-        or_(User.email == identifier.lower(), User.student_id == identifier)
+        or_(
+            User.email == email_identifier,
+            User.student_id == student_identifier,
+            User.student_id == student_identifier.upper(),
+        )
     ).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email/student ID or password")

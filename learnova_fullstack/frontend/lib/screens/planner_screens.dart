@@ -13,6 +13,7 @@ class StudyPlannerScreen extends StatefulWidget {
 class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
   List<dynamic> items = [];
   Map<String, dynamic> summary = {};
+  DateTime _selectedDate = DateTime.now();
   bool loading = true;
 
   @override
@@ -21,10 +22,39 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
     _load();
   }
 
+  String _dateKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _formatDate(DateTime d) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  }
+
+  String _dateLabel() {
+    final today = DateTime.now();
+    final isToday = today.year == _selectedDate.year &&
+        today.month == _selectedDate.month &&
+        today.day == _selectedDate.day;
+    return isToday ? 'TODAY' : 'SELECTED DATE';
+  }
+
   Future<void> _load() async {
     setState(() => loading = true);
     try {
-      items = await ApiService.studySessions();
+      items = await ApiService.studySessions(date: _dateKey(_selectedDate));
       summary = await ApiService.studySessionSummary();
     } catch (e) {
       if (mounted) {
@@ -32,6 +62,20 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
       }
     }
     if (mounted) setState(() => loading = false);
+  }
+
+  void _prevDay() {
+    setState(() {
+      _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+    });
+    _load();
+  }
+
+  void _nextDay() {
+    setState(() {
+      _selectedDate = _selectedDate.add(const Duration(days: 1));
+    });
+    _load();
   }
 
   @override
@@ -59,19 +103,15 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
                 Row(
                   children: [
                     IconButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/reminders'),
+                      onPressed: () => Navigator.pushNamed(context, '/reminders'),
                       icon: const Icon(Icons.notifications_outlined),
                     ),
                     IconButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/calendar'),
+                      onPressed: () => Navigator.pushNamed(context, '/calendar'),
                       icon: const Icon(Icons.calendar_month_outlined),
                     ),
                     IconButton(
-                      onPressed: () => Navigator.pushNamed(context,
-                              '/addSession')
-                          .then((_) => _load()),
+                      onPressed: () => Navigator.pushNamed(context, '/addSession').then((_) => _load()),
                       icon: const Icon(Icons.add_circle, color: AppColors.blue),
                     ),
                   ],
@@ -84,23 +124,29 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Icon(Icons.chevron_left),
+                  IconButton(
+                    onPressed: _prevDay,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
                   Column(
                     children: [
-                      const Text(
-                        'TODAY',
+                      Text(
+                        _dateLabel(),
                         style: TextStyle(
                           color: AppColors.muted,
                           fontSize: 10,
                         ),
                       ),
                       Text(
-                        safe(summary['today'], 'May 14, 2026'),
+                        _formatDate(_selectedDate),
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
-                  const Icon(Icons.chevron_right),
+                  IconButton(
+                    onPressed: _nextDay,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
                 ],
               ),
             ),
@@ -218,7 +264,7 @@ class EditStudyPlanScreen extends StatefulWidget {
 
 class _AddStudySessionScreenState extends State<AddStudySessionScreen> {
   final subject = TextEditingController();
-  final date = TextEditingController(text: '2026-05-23');
+  final date = TextEditingController(text: DateTime.now().toIso8601String().split('T').first);
   final start = TextEditingController(text: '10:00');
   String duration = '1 hour';
   bool loading = false;

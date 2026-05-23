@@ -6,12 +6,33 @@ import '../widgets/learnova_widgets.dart';
 
 class LoginScreen extends StatefulWidget { const LoginScreen({super.key}); @override State<LoginScreen> createState() => _LoginScreenState(); }
 class _LoginScreenState extends State<LoginScreen> {
-  final id = TextEditingController(text: 'student@learnova.lk');
+  final id = TextEditingController();
   final pw = TextEditingController(text: 'password123');
   bool loading = false;
+
+  bool _isValidIdentifier(String value) {
+    final v = value.trim();
+    final gmail = RegExp(r'^[A-Za-z0-9._%+-]+@gmail\.com$', caseSensitive: false);
+    final studentId = RegExp(r'^[A-Za-z]{2,12}-\d{4}\s\d{4}$');
+    final horizon = RegExp(
+      r'^[A-Za-z]{2,12}-\d{4}\s\d{4}@horizoncampus\.edu\.lk$',
+      caseSensitive: false,
+    );
+    return gmail.hasMatch(v) || studentId.hasMatch(v) || horizon.hasMatch(v);
+  }
+
   Future<void> _login() async {
+    final identifier = id.text.trim();
+    if (!_isValidIdentifier(identifier)) {
+      showSnack(
+        context,
+        'Use valid Gmail or ITBNM-2313 0010 / ITBNM-2313 0010@horizoncampus.edu.lk',
+      );
+      return;
+    }
+
     setState(() => loading = true);
-    try { await ApiService.login(id.text.trim(), pw.text.trim()); if (!mounted) return; Navigator.pushReplacementNamed(context, '/dashboard'); }
+    try { await ApiService.login(identifier, pw.text.trim()); if (!mounted) return; Navigator.pushReplacementNamed(context, '/dashboard'); }
     catch(e){ if(mounted) showSnack(context, e.toString().replaceFirst('Exception: ', '')); }
     finally { if(mounted) setState(() => loading = false); }
   }
@@ -27,7 +48,7 @@ class _LoginScreenState extends State<LoginScreen> {
       const Text('Sign in to continue your learning journey', style: TextStyle(color: AppColors.muted)),
       const SizedBox(height: 28),
       LCard(padding: const EdgeInsets.all(22), child: Column(children: [
-        LTextField(controller: id, label: 'Email Address / Student ID', hint: 'student@learnova.edu', icon: Icons.mail_outline),
+        LTextField(controller: id, label: 'Email Address / Student ID', hint: 'yourname@gmail.com or ITBNM-2313 0010', icon: Icons.mail_outline),
         const SizedBox(height: 16),
         LTextField(controller: pw, label: 'Password', hint: '••••••••', icon: Icons.lock_outline, obscure: true),
         Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => Navigator.pushNamed(context, '/forgot'), child: const Text('Forgot Password?'))),
@@ -59,7 +80,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     const Text('Join Learnova and start organizing better', style: TextStyle(color:AppColors.muted)), const SizedBox(height:22),
     LCard(padding: const EdgeInsets.all(22), child: Column(children: [
       LTextField(controller:name,label:'Full Name',hint:'John Doe',icon:Icons.person_outline), const SizedBox(height:14),
-      LTextField(controller:email,label:'Email Address',hint:'student@learnova.edu',icon:Icons.mail_outline,keyboardType:TextInputType.emailAddress), const SizedBox(height:14),
+      LTextField(controller:email,label:'Email Address',hint:'ITBNM-0000-0000@horizoncampus.edu.lk',icon:Icons.mail_outline,keyboardType:TextInputType.emailAddress), const SizedBox(height:14),
       LTextField(controller:course,label:'Major / Course',hint:'Computer Science',icon:Icons.menu_book_outlined), const SizedBox(height:14),
       DropdownButtonFormField<String>(value:'Student', items: const [DropdownMenuItem(value:'Student',child:Text('Student'))], onChanged:(_){}, decoration: const InputDecoration(labelText:'Role', prefixIcon:Icon(Icons.school_outlined,color:AppColors.muted))), const SizedBox(height:14),
       LTextField(controller:pass,label:'Password',hint:'••••••••',icon:Icons.lock_outline,obscure:true), const SizedBox(height:14),

@@ -9,7 +9,7 @@ from app.schemas.schemas import (
     StudySessionCreate, StudySessionRead, StudySessionUpdate,
     ProgressCreate, ProgressRead, ProgressUpdate, GoalCreate, GoalRead, GoalUpdate,
     NotificationSettingsRead, NotificationSettingsUpdate, AppSettingsRead, AppSettingsUpdate,
-    FeedbackCreate, FeedbackRead, DashboardSummary, NotificationRead
+    FeedbackCreate, FeedbackRead, FeedbackUpdate, DashboardSummary, NotificationRead
 )
 
 router = APIRouter(tags=["Learnova Modules"])
@@ -62,15 +62,29 @@ def _settings_for(db: Session, user_id: int):
 def dashboard(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     tasks = db.query(Task).filter(Task.user_id == current_user.id).all()
     progress_entries = db.query(ProgressEntry).filter(ProgressEntry.user_id == current_user.id).all()
+
+    today = date.today()
+    task_rows = [(task, _parse_date(task.due_date)) for task in tasks]
+    pending_tasks = [task for task, _ in task_rows if not task.completed]
+    today_tasks = [task for task, parsed_due in task_rows if not task.completed and parsed_due == today]
+    up_next = sorted(
+        pending_tasks,
+        key=lambda task: (
+            _parse_date(task.due_date) or date.max,
+            task.id,
+        ),
+    )[:5]
+
     return DashboardSummary(
         student_name=current_user.name,
-        today_tasks=sum(1 for t in tasks if "today" in t.due_date.lower()),
-        pending_tasks=sum(1 for t in tasks if not t.completed),
+        today_tasks=len(today_tasks),
+        pending_tasks=len(pending_tasks),
         completed_tasks=sum(1 for t in tasks if t.completed),
-        upcoming_deadlines=sum(1 for t in tasks if not t.completed),
+        upcoming_deadlines=len(pending_tasks),
         active_courses=db.query(Course).filter(Course.user_id == current_user.id, Course.archived == False).count(),
         study_sessions=db.query(StudySession).filter(StudySession.user_id == current_user.id).count(),
         total_study_hours=sum(p.study_hours for p in progress_entries),
+        up_next=up_next,
     )
 
 @router.get("/courses", response_model=list[CourseRead])
@@ -335,7 +349,7 @@ def delete_goal(item_id: int, db: Session = Depends(get_db), current_user: User 
 def list_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     settings = _settings_for(db, current_user.id)
     notifications = []
-    now_text = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now_text = datetime.now().isoformat(timespec="seconds")
 
     if settings.task_reminders or settings.deadline_warnings:
         tasks = db.query(Task).filter(Task.user_id == current_user.id, Task.completed == False).order_by(Task.due_date.asc(), Task.id.desc()).all()
@@ -411,6 +425,49 @@ def list_notifications(db: Session = Depends(get_db), current_user: User = Depen
             "is_read": False,
         })
 
+    if not notifications:
+        total_tasks = db.query(Task).filter(Task.user_id == current_user.id).count()
+        active_courses = db.query(Course).filter(Course.user_id == current_user.id, Course.archived == False).count()
+
+        if total_tasks == 0:
+            notifications.append({
+                "id": "welcome-task-tip",
+                "title": "Add Your First Task",
+                "message": "Start by adding a task to get deadline alerts and reminders on this screen.",
+                "type": "task",
+                "priority": "Low",
+                "source_id": None,
+                "action_route": "/addTask",
+                "created_at": now_text,
+                "is_read": False,
+            })
+
+        if active_courses == 0:
+            notifications.append({
+                "id": "welcome-course-tip",
+                "title": "Add a Course",
+                "message": "Create your first course so your tasks and progress can be organized better.",
+                "type": "course",
+                "priority": "Low",
+                "source_id": None,
+                "action_route": "/addCourse",
+                "created_at": now_text,
+                "is_read": False,
+            })
+
+        if not notifications:
+            notifications.append({
+                "id": "notifications-ready",
+                "title": "Notifications Are Up to Date",
+                "message": "You are all caught up for now. New reminders will appear here automatically.",
+                "type": "summary",
+                "priority": "Low",
+                "source_id": None,
+                "action_route": "/dashboard",
+                "created_at": now_text,
+                "is_read": False,
+            })
+
     return notifications
 
 @router.get("/notification-settings", response_model=NotificationSettingsRead)
@@ -439,6 +496,21 @@ def update_app_settings(payload: AppSettingsUpdate, db: Session = Depends(get_db
 def submit_feedback(payload: FeedbackCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = Feedback(user_id=current_user.id, message=payload.message)
     db.add(item); db.commit(); db.refresh(item); return item
+
+@router.get("/feedbacks", response_model=list[FeedbackRead])
+def list_feedback(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(Feedback).filter(Feedback.user_id == current_user.id).order_by(Feedback.id.desc()).all()
+
+@router.put("/feedbacks/{item_id}", response_model=FeedbackRead)
+def update_feedback(item_id: int, payload: FeedbackUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = get_owned(db, Feedback, item_id, current_user.id)
+    item.message = payload.message
+    db.commit(); db.refresh(item); return item
+
+@router.delete("/feedbacks/{item_id}")
+def delete_feedback(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = get_owned(db, Feedback, item_id, current_user.id)
+    db.delete(item); db.commit(); return {"message": "Feedback deleted"}
 
 @router.get("/help")
 def help_support():

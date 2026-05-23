@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -274,7 +275,34 @@ class ApiService {
 
   static Future<Map<String, dynamic>> sendFeedback(String message) async =>
       _postMap('/feedback', {'message': message});
+    static Future<List<dynamic>> feedbacks() async => _getList('/feedbacks');
+    static Future<Map<String, dynamic>> updateFeedback(
+        int id, Map<String, dynamic> data) async =>
+      _putMap('/feedbacks/$id', data);
+    static Future<void> deleteFeedback(int id) async => _delete('/feedbacks/$id');
   static Future<Map<String, dynamic>> help() async => _getMap('/help');
+
+  static Future<Map<String, dynamic>> uploadProfilePicture(Uint8List bytes) async {
+    final base64data = base64Encode(bytes);
+    final payload = jsonEncode({'profile_picture': base64data});
+    
+    final res = await http.put(
+      Uri.parse('$baseUrl/profile/me'),
+      headers: _headers,
+      body: payload,
+    ).timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => throw Exception('Upload timeout - image file too large or network slow'),
+    );
+    
+    if (res.statusCode != 200) {
+      throw Exception(_message(res));
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Future<void> deleteProfilePicture() async =>
+      _putMap('/profile/me', {'profile_picture': null});
 
   static Future<Map<String, dynamic>> _getMap(String path) async {
     final res = await http.get(Uri.parse('$baseUrl$path'), headers: _headers);

@@ -11,7 +11,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(30), default="Student")
     course: Mapped[str] = mapped_column(String(120), default="BSc Undergraduate")
     student_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    profile_picture: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    profile_picture: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     courses = relationship("Course", back_populates="owner", cascade="all, delete-orphan")

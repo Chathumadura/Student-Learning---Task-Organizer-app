@@ -5,6 +5,7 @@ import '../widgets/learnova_widgets.dart';
 import 'dart:async';
 import '../services/task_event_bus.dart';
 import '../services/course_event_bus.dart';
+import 'dart:convert';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -14,19 +15,21 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  late Future<Map<String, dynamic>> future;
+  late Future<List<dynamic>> dashboardFuture;
+  late Future<Map<String, dynamic>> profileFuture;
   StreamSubscription<void>? _taskSub;
   StreamSubscription<void>? _courseSub;
 
   @override
   void initState() {
     super.initState();
-    future = ApiService.dashboard();
+    dashboardFuture = _loadDashboard();
+    profileFuture = ApiService.profile();
     // Subscribe to task changes for auto-refresh
     _taskSub = TaskEventBus.stream.listen((_) {
       if (mounted) {
         setState(() {
-          future = ApiService.dashboard();
+          dashboardFuture = _loadDashboard();
         });
       }
     });
@@ -34,10 +37,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _courseSub = CourseEventBus.stream.listen((_) {
       if (mounted) {
         setState(() {
-          future = ApiService.dashboard();
+          dashboardFuture = _loadDashboard();
         });
       }
     });
+  }
+
+  Future<List<dynamic>> _loadDashboard() async {
+    final results = await Future.wait([
+      ApiService.dashboard(),
+      ApiService.tasks(),
+    ]);
+    return results;
   }
 
   @override
@@ -48,16 +59,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
-        future: future,
+  Widget build(BuildContext context) => FutureBuilder<List<dynamic>>(
+        future: dashboardFuture,
         builder: (context, snap) {
-          final d = snap.data ?? {};
+          final data = snap.data ?? [];
+          final d = data.isNotEmpty ? (data[0] as Map<String, dynamic>) : {};
+          final List tasks = data.length > 1 ? (data[1] as List<dynamic>) : [];
           final name = safe(d['student_name'], 'Student');
-
-          final List tasks = d['tasks'] ??
-              d['up_next'] ??
-              d['today_task_list'] ??
-              [];
+          final todayTasks = _tasksForToday(tasks).length;
+          final upNextTasks = _upNextTasks(tasks);
 
           return LScaffold(
             bottomNav: true,
@@ -69,14 +79,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: const [
                     SizedBox(),
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Color(0xFFDCEBFF),
-                      child: Text(
-                        'CP',
-                        style: TextStyle(
-                          color: AppColors.blue,
-                          fontWeight: FontWeight.w800,
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => Navigator.pushNamed(context, '/profile')
+                            .then((_) => setState(() {
+                              dashboardFuture = _loadDashboard();
+                              profileFuture = ApiService.profile();
+                            })),
+                        borderRadius: BorderRadius.circular(28),
+                        child: FutureBuilder<Map<String, dynamic>>(
+                          future: profileFuture,
+                          builder: (context, profileSnap) {
+                            final profileData = profileSnap.data ?? {};
+                            final profilePic =
+                                profileData['profile_picture'];
+                            
+                            if (profilePic != null &&
+                                profilePic.toString().isNotEmpty) {
+                              try {
+                                return CircleAvatar(
+                                  radius: 24,
+                                  backgroundImage: MemoryImage(
+                                    base64Decode(profilePic),
+                                  ),
+                                );
+                              } catch (_) {
+                                return _buildInitialsAvatar(name);
+                              }
+                            }
+                            return _buildInitialsAvatar(name);
+                          },
                         ),
                       ),
                     )
@@ -107,7 +145,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: _miniStat(
                         Icons.check_circle_outline,
                         'Today’s Tasks',
-                        safe(d['today_tasks'], tasks.length.toString()),
+                          todayTasks.toString(),
                         AppColors.blue,
                       ),
                     ),
@@ -246,7 +284,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
 
-                tasks.isEmpty
+                upNextTasks.isEmpty
                     ? LCard(
                         child: Column(
                           children: const [
@@ -276,8 +314,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       )
                     : LCard(
                         child: Column(
-                          children: List.generate(tasks.length, (index) {
-                            final task = tasks[index];
+                          children: List.generate(upNextTasks.length, (index) {
+                            final task = upNextTasks[index];
 
                             final title = safe(
                               task['title'] ?? task['task_title'] ?? task['name'],
@@ -306,7 +344,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   '$course • $due',
                                   _taskColor(due),
                                 ),
-                                if (index != tasks.length - 1)
+                                if (index != upNextTasks.length - 1)
                                   const Divider(),
                               ],
                             );
@@ -318,6 +356,104 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         },
       );
+
+  Widget _buildInitialsAvatar(String name) {
+    String initials;
+    final parts = name.trim().split(' ');
+    if (parts.length > 1) {
+      initials = '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    } else {
+      initials = name.isEmpty ? 'CP' : name.substring(0, 1).toUpperCase();
+    }
+    
+    return CircleAvatar(
+      radius: 24,
+      backgroundColor: const Color(0xFFDCEBFF),
+      child: Text(
+        initials,
+        style: const TextStyle(
+          color: AppColors.blue,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _upNextTasks(List<dynamic> tasks) {
+    final pending = tasks
+        .whereType<Map>()
+        .map((task) => Map<String, dynamic>.from(task))
+        .where((task) => task['completed'] != true)
+        .toList();
+
+    pending.sort((a, b) {
+      final aDate = _taskDate(a['due_date']);
+      final bDate = _taskDate(b['due_date']);
+      if (aDate == null && bDate == null) return a['id'].compareTo(b['id']);
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+      final cmp = aDate.compareTo(bDate);
+      if (cmp != 0) return cmp;
+      return a['id'].compareTo(b['id']);
+    });
+
+    return pending.take(5).toList();
+  }
+
+  List<Map<String, dynamic>> _tasksForToday(List<dynamic> tasks) {
+    final today = DateTime.now();
+    return tasks
+        .whereType<Map>()
+        .map((task) => Map<String, dynamic>.from(task))
+        .where((task) {
+          if (task['completed'] == true) return false;
+          final due = _taskDate(task['due_date']);
+          return due != null &&
+              due.year == today.year &&
+              due.month == today.month &&
+              due.day == today.day;
+        })
+        .toList();
+  }
+
+  DateTime? _taskDate(dynamic value) {
+    final text = safe(value, '').trim();
+    if (text.isEmpty) return null;
+    final lower = text.toLowerCase();
+    if (lower == 'today') return DateTime.now();
+    if (lower == 'tomorrow') {
+      final now = DateTime.now();
+      return DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+    }
+
+    final formats = [
+      RegExp(r'^(\d{4})-(\d{2})-(\d{2})$'),
+      RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$'),
+      RegExp(r'^(\d{1,2})-(\d{1,2})-(\d{4})$'),
+    ];
+
+    for (final format in formats) {
+      final match = format.firstMatch(text);
+      if (match == null) continue;
+      try {
+        if (format.pattern.contains('\\d{4})-(\\d{2})-(\\d{2})')) {
+          return DateTime(
+            int.parse(match.group(1)!),
+            int.parse(match.group(2)!),
+            int.parse(match.group(3)!),
+          );
+        }
+        return DateTime(
+          int.parse(match.group(3)!),
+          int.parse(match.group(2)!),
+          int.parse(match.group(1)!),
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
 
   Widget _miniStat(
     IconData icon,
@@ -376,7 +512,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           await Navigator.pushNamed(context, route);
 
           setState(() {
-            future = ApiService.dashboard();
+            dashboardFuture = _loadDashboard();
           });
         },
         child: LCard(

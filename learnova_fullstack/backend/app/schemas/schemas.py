@@ -1,4 +1,7 @@
+from datetime import datetime
+import re
 from pydantic import BaseModel, EmailStr, Field
+from pydantic import field_validator
 
 class Token(BaseModel):
     access_token: str
@@ -19,6 +22,34 @@ class UserLogin(BaseModel):
     # Accept either an email address or a student ID, e.g. student@learnova.lk OR LEA-2026-001
     identifier: str = Field(min_length=3)
     password: str
+
+    @field_validator("identifier")
+    @classmethod
+    def validate_identifier(cls, value: str) -> str:
+        identifier = value.strip()
+        if not identifier:
+            raise ValueError("Email / Student ID is required")
+
+        # Allowed: valid Gmail address
+        gmail_pattern = re.compile(r"^[A-Za-z0-9._%+-]+@gmail\.com$", re.IGNORECASE)
+        # Allowed student ID format: ITBNM-2313 0010 (example)
+        student_id_pattern = re.compile(r"^[A-Za-z]{2,12}-\d{4}\s\d{4}$")
+        # Allowed institutional format: ITBNM-2313 0010@horizoncampus.edu.lk
+        horizon_email_pattern = re.compile(
+            r"^[A-Za-z]{2,12}-\d{4}\s\d{4}@horizoncampus\.edu\.lk$",
+            re.IGNORECASE,
+        )
+
+        if (
+            gmail_pattern.fullmatch(identifier)
+            or student_id_pattern.fullmatch(identifier)
+            or horizon_email_pattern.fullmatch(identifier)
+        ):
+            return identifier
+
+        raise ValueError(
+            "Use a valid Gmail or format like ITBNM-2313 0010 / ITBNM-2313 0010@horizoncampus.edu.lk"
+        )
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -181,9 +212,12 @@ class AppSettingsUpdate(AppSettingsRead): pass
 
 class FeedbackCreate(BaseModel):
     message: str
+class FeedbackUpdate(BaseModel):
+    message: str
 class FeedbackRead(BaseModel):
     id: int
     message: str
+    created_at: datetime | None = None
     class Config:
         from_attributes = True
 
@@ -196,3 +230,4 @@ class DashboardSummary(BaseModel):
     active_courses: int
     study_sessions: int
     total_study_hours: float
+    up_next: list[TaskRead] = Field(default_factory=list)
