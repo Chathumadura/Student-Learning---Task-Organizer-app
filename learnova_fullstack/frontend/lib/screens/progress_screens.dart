@@ -151,12 +151,115 @@ class CourseProgressScreen extends StatefulWidget {
 }
 
 class _CourseProgressScreenState extends State<CourseProgressScreen> {
-  late Future<List<dynamic>> future;
+  List<dynamic> courses = [];
+  List<dynamic> entries = [];
+  bool loading = true;
 
   @override
   void initState() {
     super.initState();
-    future = ApiService.courseProgress();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => loading = true);
+    try {
+      courses = await ApiService.courseProgress();
+      entries = await ApiService.progress();
+    } catch (e) {
+      if (mounted) showSnack(context, e.toString().replaceFirst('Exception: ', ''));
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
+  String _weekDayFromDate(String value) {
+    final input = value.trim();
+    if (input.isEmpty || input.toLowerCase() == 'today') {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      final now = DateTime.now();
+      return days[now.weekday - 1];
+    }
+    final parsed = DateTime.tryParse(input);
+    if (parsed == null) return 'Mon';
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[parsed.weekday - 1];
+  }
+
+  Future<void> _deleteEntry(int id) async {
+    try {
+      await ApiService.deleteProgress(id);
+      await _load();
+      if (mounted) showSnack(context, 'Progress entry deleted');
+    } catch (e) {
+      if (mounted) showSnack(context, e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
+  Future<void> _editEntry(dynamic entry) async {
+    final taskCtrl = TextEditingController(text: safe(entry['task']));
+    final scoreCtrl = TextEditingController(text: safe(entry['score']));
+    final hoursCtrl = TextEditingController(text: asDouble(entry['study_hours']).toString());
+    final dateCtrl = TextEditingController(text: safe(entry['entry_date'], 'Today'));
+    String statusValue = safe(entry['status'], 'Completed');
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update Progress Entry'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LTextField(controller: taskCtrl, label: 'Task / Activity', hint: 'Study Session'),
+              const SizedBox(height: 12),
+              LTextField(controller: scoreCtrl, label: 'Score', hint: '85 or 85%'),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: statusValue,
+                items: ['Completed', 'In Progress', 'Pending', 'Needs Review']
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (v) => statusValue = v ?? 'Completed',
+                decoration: const InputDecoration(labelText: 'Status'),
+              ),
+              const SizedBox(height: 12),
+              LTextField(controller: hoursCtrl, label: 'Study Hours', hint: '1.5', keyboardType: TextInputType.number),
+              const SizedBox(height: 12),
+              LTextField(
+                controller: dateCtrl,
+                label: 'Entry Date',
+                hint: 'YYYY-MM-DD or Today',
+                icon: Icons.calendar_today_outlined,
+                readOnly: true,
+                onTap: () => pickDateForController(ctx, dateCtrl),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Update')),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    try {
+      final entryDate = dateCtrl.text.trim().isEmpty ? 'Today' : dateCtrl.text.trim();
+      await ApiService.updateProgress(asInt(entry['id']), {
+        'task': taskCtrl.text.trim(),
+        'score': scoreCtrl.text.trim(),
+        'status': statusValue,
+        'study_hours': asDouble(hoursCtrl.text),
+        'entry_date': entryDate,
+        'week_day': _weekDayFromDate(entryDate),
+      });
+      await _load();
+      if (mounted) showSnack(context, 'Progress entry updated');
+    } catch (e) {
+      if (mounted) showSnack(context, e.toString().replaceFirst('Exception: ', ''));
+    }
   }
 
   @override
@@ -164,14 +267,59 @@ class _CourseProgressScreenState extends State<CourseProgressScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Course Progress')),
       body: LScaffold(
-        child: FutureBuilder<List<dynamic>>(
-          future: future,
-          builder: (context, snap) {
-            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            final list = snap.data ?? [];
-            if (list.isEmpty) return const EmptyState(title: 'No course progress yet');
-            return Column(children: list.map((c) => _courseCard(c)).toList());
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (loading)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              if (courses.isEmpty)
+                const EmptyState(title: 'No course progress yet')
+              else
+                ...courses.map((c) => _courseCard(c)).toList(),
+              const SizedBox(height: 16),
+              const Text('Progress Entries', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+              const SizedBox(height: 10),
+              if (entries.isEmpty)
+                const EmptyState(title: 'No progress entries yet')
+              else
+                ...entries.map((entry) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: LCard(
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(safe(entry['task'], 'Progress'), style: const TextStyle(fontWeight: FontWeight.w900)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Score: ${safe(entry['score'], '-')}, Status: ${safe(entry['status'], '-')}',
+                                    style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Study: ${asDouble(entry['study_hours']).toStringAsFixed(1)}h, Date: ${safe(entry['entry_date'], '-')}',
+                                    style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => _editEntry(entry),
+                              icon: const Icon(Icons.edit_outlined, color: AppColors.blue),
+                            ),
+                            IconButton(
+                              onPressed: () => _deleteEntry(asInt(entry['id'])),
+                              icon: const Icon(Icons.delete_outline, color: AppColors.red),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
+            ],
+          ],
         ),
       ),
     );
@@ -236,8 +384,8 @@ class _PerformanceChartScreenState extends State<PerformanceChartScreen> {
           builder: (context, snap) {
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final stats = snap.data ?? [];
-            final maxValue = stats.fold<double>(1, (m, e) => asDouble(e['hours']) > m ? asDouble(e['hours']) : m);
-            final total = stats.fold<double>(0, (sum, e) => sum + asDouble(e['hours']));
+            final maxValue = stats.fold<double>(1, (m, e) => asDouble(e['study_hours']) > m ? asDouble(e['study_hours']) : m);
+            final total = stats.fold<double>(0, (sum, e) => sum + asDouble(e['study_hours']));
             return LCard(
               padding: const EdgeInsets.all(22),
               child: Column(
@@ -250,7 +398,7 @@ class _PerformanceChartScreenState extends State<PerformanceChartScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: stats.map((s) {
-                        final hours = asDouble(s['hours']);
+                        final hours = asDouble(s['study_hours']);
                         final label = safe(s['day'], 'Day').substring(0, safe(s['day'], 'Day').length < 3 ? safe(s['day'], 'Day').length : 3);
                         return Expanded(
                           child: Column(
@@ -297,16 +445,45 @@ class _AddProgressEntryScreenState extends State<AddProgressEntryScreen> {
   String status = 'Completed';
   bool loading = false;
 
+  String _weekDayFromDate(String value) {
+    final input = value.trim();
+    if (input.isEmpty || input.toLowerCase() == 'today') {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      final now = DateTime.now();
+      return days[now.weekday - 1];
+    }
+    final parsed = DateTime.tryParse(input);
+    if (parsed == null) return 'Mon';
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[parsed.weekday - 1];
+  }
+
+  Future<void> _updateCourseProgressFromScore() async {
+    final allCourses = await ApiService.courses();
+    final selected = allCourses.where((c) => safe(c['name']) == course).toList();
+    if (selected.isEmpty) return;
+    final courseId = asInt(selected.first['id']);
+    final current = await ApiService.getCourse(courseId);
+    final existing = asDouble(current['progress']);
+    final cleaned = score.text.replaceAll('%', '').trim();
+    final scoreVal = double.tryParse(cleaned) ?? 0;
+    final next = ((existing + scoreVal) / 2).clamp(0, 100).toDouble();
+    await ApiService.updateCourse(courseId, {'progress': next});
+  }
+
   Future<void> _save() async {
     setState(() => loading = true);
     try {
+      final entryDate = date.text.trim().isEmpty ? 'Today' : date.text.trim();
       await ApiService.addProgress({
         'task': task.text.trim(),
         'score': score.text.trim(),
         'status': status,
         'study_hours': asDouble(hours.text),
-        'entry_date': date.text.trim(),
+        'entry_date': entryDate,
+        'week_day': _weekDayFromDate(entryDate),
       });
+      await _updateCourseProgressFromScore();
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
@@ -340,6 +517,15 @@ class _AddProgressEntryScreenState extends State<AddProgressEntryScreen> {
               ),
               const SizedBox(height: 16),
               LTextField(controller: hours, label: 'Duration (minutes) or Score', hint: 'e.g. 60 or 95', keyboardType: TextInputType.number),
+              const SizedBox(height: 16),
+              LTextField(
+                controller: date,
+                label: 'Entry Date',
+                hint: 'YYYY-MM-DD or Today',
+                icon: Icons.calendar_today_outlined,
+                readOnly: true,
+                onTap: () => pickDateForController(context, date),
+              ),
               const SizedBox(height: 20),
               LButton(text: loading ? 'Saving...' : 'Save Entry', icon: Icons.save_outlined, onPressed: loading ? null : _save),
             ],
@@ -401,7 +587,14 @@ class _GoalsSettingScreenState extends State<GoalsSettingScreen> {
                   const SizedBox(height: 22),
                   LTextField(controller: title, label: 'Goal Title', hint: 'e.g. Finish all assignments early'),
                   const SizedBox(height: 16),
-                  LTextField(controller: targetDate, label: 'Target Date', hint: 'YYYY-MM-DD', icon: Icons.calendar_today_outlined),
+                  LTextField(
+                    controller: targetDate,
+                    label: 'Target Date',
+                    hint: 'YYYY-MM-DD',
+                    icon: Icons.calendar_today_outlined,
+                    readOnly: true,
+                    onTap: () => pickDateForController(context, targetDate),
+                  ),
                   const SizedBox(height: 20),
                   LButton(text: 'Create Goal', onPressed: _create),
                 ],

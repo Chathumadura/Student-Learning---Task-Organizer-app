@@ -45,6 +45,12 @@ def _days_until(value: str):
         return None
     return (due - date.today()).days
 
+
+def _week_day_from_entry_date(entry_date: str | None) -> str:
+    parsed = _parse_date(entry_date or "Today")
+    target = parsed or date.today()
+    return target.strftime("%a")
+
 def _settings_for(db: Session, user_id: int):
     item = db.query(NotificationSetting).filter(NotificationSetting.user_id == user_id).first()
     if not item:
@@ -291,12 +297,17 @@ def course_progress(db: Session = Depends(get_db), current_user: User = Depends(
 
 @router.post("/progress", response_model=ProgressRead, status_code=201)
 def create_progress(payload: ProgressCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    item = ProgressEntry(user_id=current_user.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["week_day"] = _week_day_from_entry_date(data.get("entry_date"))
+    item = ProgressEntry(user_id=current_user.id, **data)
     db.add(item); db.commit(); db.refresh(item); return item
 
 @router.put("/progress/{item_id}", response_model=ProgressRead)
 def update_progress(item_id: int, payload: ProgressUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    item = get_owned(db, ProgressEntry, item_id, current_user.id); update_model(item, payload); db.commit(); db.refresh(item); return item
+    item = get_owned(db, ProgressEntry, item_id, current_user.id)
+    update_model(item, payload)
+    item.week_day = _week_day_from_entry_date(item.entry_date)
+    db.commit(); db.refresh(item); return item
 
 @router.delete("/progress/{item_id}")
 def delete_progress(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

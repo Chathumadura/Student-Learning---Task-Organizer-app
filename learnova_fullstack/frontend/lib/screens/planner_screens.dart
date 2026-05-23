@@ -218,7 +218,7 @@ class EditStudyPlanScreen extends StatefulWidget {
 
 class _AddStudySessionScreenState extends State<AddStudySessionScreen> {
   final subject = TextEditingController();
-  final date = TextEditingController(text: '2026-05-14');
+  final date = TextEditingController(text: '2026-05-23');
   final start = TextEditingController(text: '10:00');
   String duration = '1 hour';
   bool loading = false;
@@ -267,12 +267,17 @@ class _AddStudySessionScreenState extends State<AddStudySessionScreen> {
                     label: 'Date',
                     hint: 'YYYY-MM-DD',
                     icon: Icons.calendar_today_outlined,
+                    readOnly: true,
+                    onTap: () => pickDateForController(context, date),
                   ),
                   const SizedBox(height: 16),
                   LTextField(
                     controller: start,
                     label: 'Start Time',
                     hint: '10:00',
+                    icon: Icons.schedule,
+                    readOnly: true,
+                    onTap: () => pickTimeForController(context, start),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -385,12 +390,17 @@ class _EditStudyPlanScreenState extends State<EditStudyPlanScreen> {
                     label: 'Date',
                     hint: 'YYYY-MM-DD',
                     icon: Icons.calendar_today_outlined,
+                    readOnly: true,
+                    onTap: () => pickDateForController(context, date),
                   ),
                   const SizedBox(height: 16),
                   LTextField(
                     controller: start,
                     label: 'Start Time',
                     hint: '10:00',
+                    icon: Icons.schedule,
+                    readOnly: true,
+                    onTap: () => pickTimeForController(context, start),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -444,15 +454,124 @@ class CalendarViewScreen extends StatefulWidget {
 }
 
 class _CalendarViewScreenState extends State<CalendarViewScreen> {
-  List<dynamic> items = [];
+  final List<String> _weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  final List<String> _months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  final List<String> _shortMonths = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  List<dynamic> _items = [];
+  bool _loading = true;
+  DateTime _currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime _selectedDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
   @override
   void initState() {
     super.initState();
-    ApiService.studySessions().then((v) {
-      if (mounted) setState(() => items = v);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      _items = await ApiService.studySessions();
+    } catch (e) {
+      if (mounted) {
+        showSnack(context, e.toString().replaceFirst('Exception: ', ''));
+      }
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  String _dateKey(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
+  }
+
+  DateTime? _parseDate(dynamic raw) {
+    final value = safe(raw).trim();
+    if (value.isEmpty) return null;
+    if (value.toLowerCase() == 'today') return _dateOnly(DateTime.now());
+    final parsed = DateTime.tryParse(value);
+    if (parsed != null) return _dateOnly(parsed);
+    return null;
+  }
+
+  Map<String, List<dynamic>> get _eventsByDate {
+    final map = <String, List<dynamic>>{};
+    for (final item in _items) {
+      final d = _parseDate(item['session_date']);
+      if (d == null) continue;
+      final key = _dateKey(d);
+      map.putIfAbsent(key, () => []);
+      map[key]!.add(item);
+    }
+    return map;
+  }
+
+  List<dynamic> get _selectedEvents => _eventsByDate[_dateKey(_selectedDate)] ?? [];
+
+  List<DateTime?> _monthCells() {
+    final firstDay = DateTime(_currentMonth.year, _currentMonth.month, 1);
+    final startOffset = firstDay.weekday % 7;
+    final daysInMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
+    final total = startOffset + daysInMonth;
+    final trailing = (7 - (total % 7)) % 7;
+    final cellCount = total + trailing;
+    return List<DateTime?>.generate(cellCount, (index) {
+      final day = index - startOffset + 1;
+      if (day < 1 || day > daysInMonth) return null;
+      return DateTime(_currentMonth.year, _currentMonth.month, day);
     });
   }
+
+  void _prevMonth() {
+    setState(() {
+      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1, 1);
+      final lastDay = DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
+      final keepDay = _selectedDate.day > lastDay ? lastDay : _selectedDate.day;
+      _selectedDate = DateTime(_currentMonth.year, _currentMonth.month, keepDay);
+    });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1);
+      final lastDay = DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
+      final keepDay = _selectedDate.day > lastDay ? lastDay : _selectedDate.day;
+      _selectedDate = DateTime(_currentMonth.year, _currentMonth.month, keepDay);
+    });
+  }
+
+  String _eventsHeading() => 'Events on ${_shortMonths[_selectedDate.month - 1]} ${_selectedDate.day}';
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -461,7 +580,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 30),
+            const SizedBox(height: 22),
             LCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -469,20 +588,35 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'May 2026',
-                        style: TextStyle(
+                      Text(
+                        '${_months[_currentMonth.month - 1]} ${_currentMonth.year}',
+                        style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 18,
                         ),
                       ),
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.chevron_left),
-                          Icon(Icons.chevron_right),
+                          IconButton(onPressed: _prevMonth, icon: const Icon(Icons.chevron_left)),
+                          IconButton(onPressed: _nextMonth, icon: const Icon(Icons.chevron_right)),
                         ],
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: _weekdays
+                        .map(
+                          (w) => Expanded(
+                            child: Center(
+                              child: Text(
+                                w,
+                                style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                   const SizedBox(height: 20),
                   GridView.builder(
@@ -493,25 +627,45 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                       crossAxisCount: 7,
                       mainAxisSpacing: 8,
                       crossAxisSpacing: 8,
+                      childAspectRatio: 1,
                     ),
-                    itemCount: 35,
+                    itemCount: _monthCells().length,
                     itemBuilder: (c, i) {
-                      final day = i + 1;
-                      final active = day == 14;
-                      return Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color:
-                              active ? AppColors.blue : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '$day',
-                          style: TextStyle(
-                            color: active ? Colors.white : AppColors.text,
-                            fontWeight: active
-                                ? FontWeight.w900
-                                : FontWeight.w500,
+                      final date = _monthCells()[i];
+                      if (date == null) return const SizedBox.shrink();
+                      final isSelected = _dateOnly(date) == _dateOnly(_selectedDate);
+                      final hasEvent = (_eventsByDate[_dateKey(date)] ?? []).isNotEmpty;
+
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => setState(() => _selectedDate = date),
+                        child: Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.blue : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '${date.day}',
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : AppColors.text,
+                                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              if (hasEvent)
+                                Container(
+                                  width: 4,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? Colors.white : AppColors.blue,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       );
@@ -521,39 +675,38 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            const Text(
-              'Events',
-              style: TextStyle(fontWeight: FontWeight.w900),
+            Text(
+              _eventsHeading(),
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 12),
-            if (items.isEmpty)
-              const EmptyState()
+            if (_loading)
+              const Center(child: CircularProgressIndicator())
+            else if (_selectedEvents.isEmpty)
+              const EmptyState(title: 'No events on this date')
             else
-              ...items
-                  .take(3)
-                  .map((e) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: LCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                safe(e['subject']),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              Text(
-                                '${safe(e['start_time'])} • ${safe(e['duration'])}',
-                                style: const TextStyle(
-                                  color: AppColors.muted,
-                                ),
-                              ),
-                            ],
+              ..._selectedEvents.map((e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: LCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            safe(e['subject']),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
-                        ),
-                      ))
-                  .toList(),
+                          Text(
+                            '${safe(e['start_time'])} • ${safe(e['duration'])}',
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )),
           ],
         ),
       ));

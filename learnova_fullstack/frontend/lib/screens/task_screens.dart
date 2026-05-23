@@ -326,6 +326,8 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
                     label: 'Due Date',
                     hint: 'YYYY-MM-DD',
                     icon: Icons.calendar_today_outlined,
+                    readOnly: true,
+                    onTap: () => pickDateForController(context, due),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -446,6 +448,8 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
                     label: 'Due Date',
                     hint: 'YYYY-MM-DD',
                     icon: Icons.calendar_today_outlined,
+                    readOnly: true,
+                    onTap: () => pickDateForController(context, due),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(

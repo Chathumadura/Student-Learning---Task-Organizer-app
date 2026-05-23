@@ -135,7 +135,20 @@ class LTextField extends StatelessWidget {
   final bool obscure;
   final TextInputType? keyboardType;
   final int maxLines;
-  const LTextField({super.key, required this.controller, required this.label, this.hint = '', this.icon, this.obscure = false, this.keyboardType, this.maxLines = 1});
+  final bool readOnly;
+  final VoidCallback? onTap;
+  const LTextField({
+    super.key,
+    required this.controller,
+    required this.label,
+    this.hint = '',
+    this.icon,
+    this.obscure = false,
+    this.keyboardType,
+    this.maxLines = 1,
+    this.readOnly = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +157,8 @@ class LTextField extends StatelessWidget {
       obscureText: obscure,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      readOnly: readOnly,
+      onTap: onTap,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -229,3 +244,66 @@ void showSnack(BuildContext context, String message) {
 String safe(dynamic value, [String fallback = '']) => value == null ? fallback : value.toString();
 int asInt(dynamic value, [int fallback = 0]) => value is int ? value : int.tryParse(value?.toString() ?? '') ?? fallback;
 double asDouble(dynamic value, [double fallback = 0]) => value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '') ?? fallback;
+
+DateTime? _parsePickerDateText(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+  if (text.toLowerCase() == 'today') return DateTime.now();
+  final iso = DateTime.tryParse(text);
+  if (iso != null) return iso;
+  return null;
+}
+
+Future<void> pickDateForController(
+  BuildContext context,
+  TextEditingController controller, {
+  DateTime? firstDate,
+  DateTime? lastDate,
+}) async {
+  final now = DateTime.now();
+  final minDate = firstDate ?? DateTime(now.year - 10, 1, 1);
+  final maxDate = lastDate ?? DateTime(now.year + 20, 12, 31);
+
+  var initial = _parsePickerDateText(controller.text) ?? now;
+  if (initial.isBefore(minDate)) initial = minDate;
+  if (initial.isAfter(maxDate)) initial = maxDate;
+
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: initial,
+    firstDate: minDate,
+    lastDate: maxDate,
+  );
+  if (picked == null) return;
+  controller.text = '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+}
+
+TimeOfDay? _parsePickerTimeText(String raw) {
+  final text = raw.trim().toLowerCase();
+  if (text.isEmpty) return null;
+
+  final normalized = text.replaceAll('.', ':').replaceAll(' ', '');
+  final regex = RegExp(r'^(\d{1,2}):(\d{2})(am|pm)?$');
+  final m = regex.firstMatch(normalized);
+  if (m == null) return null;
+
+  int hour = int.tryParse(m.group(1) ?? '') ?? 0;
+  final minute = int.tryParse(m.group(2) ?? '') ?? 0;
+  final ampm = m.group(3);
+
+  if (ampm == 'pm' && hour < 12) hour += 12;
+  if (ampm == 'am' && hour == 12) hour = 0;
+
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
+Future<void> pickTimeForController(BuildContext context, TextEditingController controller) async {
+  final initial = _parsePickerTimeText(controller.text) ?? TimeOfDay.now();
+  final picked = await showTimePicker(
+    context: context,
+    initialTime: initial,
+  );
+  if (picked == null) return;
+  controller.text = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+}
