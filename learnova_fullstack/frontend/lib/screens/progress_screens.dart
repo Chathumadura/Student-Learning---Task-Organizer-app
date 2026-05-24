@@ -516,7 +516,7 @@ class _AddProgressEntryScreenState extends State<AddProgressEntryScreen> {
                 decoration: const InputDecoration(labelText: 'Course'),
               ),
               const SizedBox(height: 16),
-              LTextField(controller: hours, label: 'Duration (minutes) or Score', hint: 'e.g. 60 or 95', keyboardType: TextInputType.number),
+              LTextField(controller: hours, label: 'Duration (Hours) or Score', hint: 'e.g. 60 or 95', keyboardType: TextInputType.number),
               const SizedBox(height: 16),
               LTextField(
                 controller: date,

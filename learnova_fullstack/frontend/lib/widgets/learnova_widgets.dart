@@ -1,6 +1,8 @@
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/api_service.dart';
 
 class LScaffold extends StatelessWidget {
   final Widget child;
@@ -65,7 +67,26 @@ class Header extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const LearnovaLogo(size: 22),
-            if (avatar) const CircleAvatar(radius: 25, backgroundColor: Color(0xFFDCEBFF), child: Text('CP', style: TextStyle(color: AppColors.blue, fontWeight: FontWeight.w800))),
+            if (avatar)
+              FutureBuilder<Map<String, dynamic>>(
+                future: ApiService.profile(),
+                builder: (context, snap) {
+                  final pdata = snap.data ?? {};
+                  final pic = pdata['profile_picture'];
+                  Widget avatarWidget;
+                  if (pic != null && pic.toString().isNotEmpty) {
+                    try {
+                      avatarWidget = CircleAvatar(radius: 25, backgroundImage: MemoryImage(base64Decode(pic)));
+                    } catch (e) {
+                      avatarWidget = const CircleAvatar(radius: 25, backgroundColor: Color(0xFFDCEBFF), child: Text('CP', style: TextStyle(color: AppColors.blue, fontWeight: FontWeight.w800)));
+                    }
+                  } else {
+                    final initials = (safe(pdata['name'], 'Student').split(' ').map((s) => s.isNotEmpty ? s[0] : '').take(2).join()).toUpperCase();
+                    avatarWidget = CircleAvatar(radius: 25, backgroundColor: const Color(0xFFDCEBFF), child: Text(initials, style: const TextStyle(color: AppColors.blue, fontWeight: FontWeight.w800)));
+                  }
+                  return InkWell(onTap: () => Navigator.pushNamed(context, '/profile'), child: avatarWidget);
+                },
+              ),
           ],
         ),
         const SizedBox(height: 28),
