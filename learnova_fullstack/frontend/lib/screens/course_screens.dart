@@ -54,12 +54,15 @@ class _CourseListScreenState extends State<CourseListScreen> {
                 .contains(q.toLowerCase()))
         .toList();
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.blue,
-        foregroundColor: Colors.white,
-        onPressed: () =>
-            Navigator.pushNamed(context, '/addCourse').then((_) => _load()),
-        child: const Icon(Icons.add),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80),
+        child: FloatingActionButton(
+          backgroundColor: AppColors.blue,
+          foregroundColor: Colors.white,
+          onPressed: () =>
+              Navigator.pushNamed(context, '/addCourse').then((_) => _load()),
+          child: const Icon(Icons.add),
+        ),
       ),
       body: LScaffold(
         bottomNav: true,

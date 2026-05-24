@@ -7,7 +7,7 @@ import '../widgets/learnova_widgets.dart';
 class LoginScreen extends StatefulWidget { const LoginScreen({super.key}); @override State<LoginScreen> createState() => _LoginScreenState(); }
 class _LoginScreenState extends State<LoginScreen> {
   final id = TextEditingController();
-  final pw = TextEditingController(text: 'password123');
+  final pw = TextEditingController();
   bool loading = false;
 
   bool _isValidIdentifier(String value) {

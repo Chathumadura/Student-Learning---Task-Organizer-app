@@ -80,12 +80,15 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.blue,
-        foregroundColor: Colors.white,
-        onPressed: () =>
-            Navigator.pushNamed(context, '/addSession').then((_) => _load()),
-        child: const Icon(Icons.add),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80),
+        child: FloatingActionButton(
+          backgroundColor: AppColors.blue,
+          foregroundColor: Colors.white,
+          onPressed: () =>
+              Navigator.pushNamed(context, '/addSession').then((_) => _load()),
+          child: const Icon(Icons.add),
+        ),
       ),
       body: LScaffold(
         bottomNav: true,
