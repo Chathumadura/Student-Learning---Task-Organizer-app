@@ -1,6 +1,8 @@
 
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'dart:convert';
+import '../services/api_service.dart';
 
 class LScaffold extends StatelessWidget {
   final Widget child;
@@ -65,7 +67,32 @@ class Header extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const LearnovaLogo(size: 22),
-            if (avatar) const CircleAvatar(radius: 25, backgroundColor: Color(0xFFDCEBFF), child: Text('CP', style: TextStyle(color: AppColors.blue, fontWeight: FontWeight.w800))),
+            if (avatar)
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(28),
+                  onTap: () => Navigator.pushNamed(context, '/profile'),
+                  child: FutureBuilder<Map<String, dynamic>>(
+                    future: ApiService.profile(),
+                    builder: (context, profileSnap) {
+                      final profileData = profileSnap.data ?? {};
+                      final profilePic = profileData['profile_picture'];
+                      if (profilePic != null && profilePic.toString().isNotEmpty) {
+                        try {
+                          return CircleAvatar(
+                            radius: 25,
+                            backgroundImage: MemoryImage(base64Decode(profilePic)),
+                          );
+                        } catch (_) {
+                          // fall through to initials
+                        }
+                      }
+                      return CircleAvatar(radius: 25, backgroundColor: Color(0xFFDCEBFF), child: Text('CP', style: TextStyle(color: AppColors.blue, fontWeight: FontWeight.w800)));
+                    },
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 28),

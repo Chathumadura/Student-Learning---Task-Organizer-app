@@ -148,6 +148,7 @@ class ApiService {
     CourseEventBus.notify();
   }
 
+// member 3 - task management
   static Future<List<dynamic>> tasks(
       {String? status, String? priority, String? search}) async {
     final params = <String, String>{};
@@ -195,6 +196,7 @@ class ApiService {
     await _delete('/tasks/$id');
     TaskEventBus.notify();
   }
+
 
   static Future<List<dynamic>> studySessions(
       {String? date, String? search}) async {
