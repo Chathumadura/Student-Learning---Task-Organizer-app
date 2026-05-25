@@ -1,8 +1,6 @@
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../services/api_service.dart';
 
 class LScaffold extends StatelessWidget {
   final Widget child;
@@ -67,26 +65,7 @@ class Header extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const LearnovaLogo(size: 22),
-            if (avatar)
-              FutureBuilder<Map<String, dynamic>>(
-                future: ApiService.profile(),
-                builder: (context, snap) {
-                  final pdata = snap.data ?? {};
-                  final pic = pdata['profile_picture'];
-                  Widget avatarWidget;
-                  if (pic != null && pic.toString().isNotEmpty) {
-                    try {
-                      avatarWidget = CircleAvatar(radius: 25, backgroundImage: MemoryImage(base64Decode(pic)));
-                    } catch (e) {
-                      avatarWidget = const CircleAvatar(radius: 25, backgroundColor: Color(0xFFDCEBFF), child: Text('CP', style: TextStyle(color: AppColors.blue, fontWeight: FontWeight.w800)));
-                    }
-                  } else {
-                    final initials = (safe(pdata['name'], 'Student').split(' ').map((s) => s.isNotEmpty ? s[0] : '').take(2).join()).toUpperCase();
-                    avatarWidget = CircleAvatar(radius: 25, backgroundColor: const Color(0xFFDCEBFF), child: Text(initials, style: const TextStyle(color: AppColors.blue, fontWeight: FontWeight.w800)));
-                  }
-                  return InkWell(onTap: () => Navigator.pushNamed(context, '/profile'), child: avatarWidget);
-                },
-              ),
+            if (avatar) const CircleAvatar(radius: 25, backgroundColor: Color(0xFFDCEBFF), child: Text('CP', style: TextStyle(color: AppColors.blue, fontWeight: FontWeight.w800))),
           ],
         ),
         const SizedBox(height: 28),
@@ -148,7 +127,7 @@ class LButton extends StatelessWidget {
   }
 }
 
-class LTextField extends StatelessWidget {
+class LTextField extends StatefulWidget {
   final TextEditingController controller;
   final String label;
   final String hint;
@@ -172,18 +151,40 @@ class LTextField extends StatelessWidget {
   });
 
   @override
+  State<LTextField> createState() => _LTextFieldState();
+}
+
+class _LTextFieldState extends State<LTextField> {
+  bool _hidden = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _hidden = widget.obscure;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return TextField(
-      controller: controller,
-      obscureText: obscure,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      readOnly: readOnly,
-      onTap: onTap,
+      controller: widget.controller,
+      obscureText: widget.obscure ? _hidden : false,
+      keyboardType: widget.keyboardType,
+      maxLines: widget.maxLines,
+      readOnly: widget.readOnly,
+      onTap: widget.onTap,
       decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: icon == null ? null : Icon(icon, color: AppColors.muted),
+        labelText: widget.label,
+        hintText: widget.hint,
+        prefixIcon: widget.icon == null ? null : Icon(widget.icon, color: AppColors.muted),
+        suffixIcon: widget.obscure
+            ? IconButton(
+                onPressed: () => setState(() => _hidden = !_hidden),
+                icon: Icon(
+                  _hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  color: AppColors.muted,
+                ),
+              )
+            : null,
       ),
     );
   }
